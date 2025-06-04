@@ -124,7 +124,7 @@ result <- cbind(moy_typo, ecart_moy, z_score)
 # Graphiques ------------------------------------------------------------------
 
 # Ouvrir un fichier PDF
-pdf("graph_clust12.pdf", width = 12, height = 7)
+pdf("output/graph_clust12.pdf", width = 12, height = 7)
 
 # Boucle sur chaque classe
 for (i in 1:nrow(result)) {
