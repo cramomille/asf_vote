@@ -15,10 +15,10 @@ library(readxl)
 
 # Lecture du fichier
 irisr_e <- st_read("input/IRISrE/AR04b_sf_IRISrE.shp")
-irisr_e <- st_transform(irisr_e, crs = "EPSG:2154")
 
 # Repositionnement des DROM
 irisr_e <- asf_drom(f = irisr_e, id = "IRISE_C")
+
 
 # Creation de zooms
 z <- asf_zoom(f = irisr_e, 
@@ -54,8 +54,6 @@ fondata <- asf_fondata(f = irisr_e_simply,
 dep <- fondata
 dep$DEP_CODE <- substr(dep$IRISE_C, 1, 2)
 dep <- asf_borders(f = dep, by = "DEP_CODE")
-
-
 
 # Boucle pour realiser toutes les cartes et les exporter en PDF
 for (i in 7:21) {
@@ -95,3 +93,131 @@ for (i in 7:21) {
   # Fermer le PDF
   dev.off()
 }
+
+###############################################################################
+################################################################### CARTES AXES
+
+pal <- asf_palette("div", nb = 8)
+
+var <- "Dim.1"
+breaks <- c(-9, -6, -3, -1, 0, 1, 3, 6)
+
+var <- "Dim.2"
+breaks = c(-7, -6, -3, -1, 0, 1, 3, 6)
+
+var <- "Dim.3"
+breaks = c(-7, -6, -3, -1, 0, 1, 3, 6, 13)
+
+mf_map(fondata, 
+       var = var, 
+       type = "choro",
+       breaks = breaks,
+       pal = pal,
+       border = NA)
+mf_map(dep, 
+       col = "white", 
+       lwd = 1, 
+       add = TRUE)
+mf_label(label, 
+         var = "label", 
+         col = "#000000", 
+         font = 1)
+
+###############################################################################
+################################################################ CARTES CLASSES
+
+var <- "Clust17"
+nb <- length(unique(fondata[[var]]))
+pal <- grDevices::rainbow(nb)
+
+pal <- colorRampPalette(brewer.pal(12, "Paired"))(nb)
+
+
+mf_map(fondata, 
+       var = var, 
+       type = "typo", 
+       pal = pal,
+       border = NA)
+mf_map(dep, 
+       col = "white", 
+       lwd = 1, 
+       add = TRUE)
+mf_label(label, 
+         var = "label", 
+         col = "#000000", 
+         font = 1)
+
+###############################################################################
+############################################################## TYPO DES CLASSES
+
+x <- fondata
+
+# Tableau ---------------------------------------------------------------------
+# Conservation des colonnes utiles
+vars <- x[, c(7:21)]
+vars$geometry <- NULL
+
+var_names <- names(vars)
+
+typologie <- x[[27]]
+
+# Calcul des moyennes pour la France entiere
+moy_glob <- colMeans(vars, na.rm = TRUE)
+
+# Calcul des moyennes par classe
+moy_typo <- aggregate(vars, by = list(Classe = typologie), FUN = mean, na.rm = TRUE)
+
+# Calcul de l'ecart a la moyenne nationale
+ecart_moy <- as.data.frame(t(apply(moy_typo[, -1], 1, function(x) x - moy_glob)))
+names(ecart_moy) <- paste0(var_names, "_ecart")
+
+# Calcul de l'ecart-type global (pour chaque tranche d’age)
+ecart_type <- apply(vars, 2, sd, na.rm = TRUE)
+
+# Calcul de l'ecart standardise (z-score)
+z_score <- as.data.frame(t(apply(moy_typo[, -1], 1, function(x) (x - moy_glob) / ecart_type)))
+names(z_score) <- paste0(var_names, "_zscore")
+
+# Fusion des resultats
+result <- cbind(moy_typo, ecart_moy, z_score)
+
+
+# Graphiques ------------------------------------------------------------------
+
+# Ouvrir un fichier PDF
+pdf("output/graph_clust17.pdf", width = 12, height = 7)
+
+# Boucle sur chaque classe
+for (i in 1:nrow(result)) {
+  
+  # Traitements pour la classe i
+  moyennes <- as.numeric(result[i, var_names])
+  ecarts   <- as.numeric(result[i, paste0(var_names, "_ecart")])
+  zscores  <- as.numeric(result[i, paste0(var_names, "_zscore")])
+  
+  # Construction d'un vecteur avec les 3 groupes
+  bar_values <- c(moyennes, ecarts, zscores)
+  
+  # Noms des barres
+  group_labels <- c(
+    paste0("Moy_", var_names),
+    paste0("Écart_", var_names),
+    paste0("Z_", var_names)
+  )
+  
+  # Creation du barplot
+  classe_nom <- as.character(result$Classe[i])
+  par(mar = c(10, 4, 4, 2))  # marges pour les noms en abscisse
+  barplot(bar_values,
+          names.arg = group_labels,
+          las = 2, # orientation verticale des labels
+          col = rep(c("steelblue", "darkorange", "darkred"), each = length(var_names)),
+          border = NA,
+          main = paste("Classe", classe_nom, ": Moyennes, ecarts et z-scores par tranche d'age"),
+          ylab = "Valeur")
+  
+  abline(h = 0, lty = 2)
+}
+
+# Fermer le PDF
+dev.off()
